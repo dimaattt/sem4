@@ -5,7 +5,7 @@ using namespace std;
 
 void add_to_list(list<double> &lst)
 {
-    double tmp;
+    double tmp = 0;
     list<double>::iterator p = lst.begin();
     for (p; p != lst.end(); p++)
         tmp += *p; // можно было бы tmp += *p / lst.size() чтобы избежать переполнения 
