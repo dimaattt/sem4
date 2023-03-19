@@ -4,7 +4,7 @@
 
 using namespace std;
 
-void vec_to_list(vector<int> vec, list<int> &list)
+void vec_to_list(const vector<int> &vec, list<int> &list)
 {
     for (int i = 0; i < vec.size(); i++)
     {
