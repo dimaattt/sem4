@@ -12,9 +12,9 @@
 
 using namespace std;
 
-#define PORT 8000
+#define PORT 1235
 #define BACKLOG 5
-#define BUFSIZE 1024
+#define BUFSIZE 4096
 #define BASE_ADDR "127.0.0.1"
 
 class SocketAddress
@@ -56,6 +56,10 @@ public:
         close(sd_);
     }
 
+    void Shutdown()
+    {
+        shutdown(sd_, SHUT_RDWR);
+    }
     int GetSd() const { return sd_; }
 };
 
@@ -99,6 +103,112 @@ public:
             cerr << "err with connect" << endl;
             exit(1);
         }
+    }
+};
+
+class HttpHeader
+{
+    string name_;
+    string value_;
+
+public:
+    HttpHeader() : name_(" "), value_(" ") {}
+    HttpHeader(const string &str, const string &val) : name_(str), value_(val) {}
+    HttpHeader(const HttpHeader &copy)
+    {
+        name_ = copy.name_;
+        value_ = copy.value_;
+    }
+
+    string str_uni() const { return name_ + value_; }
+    int len() const {return name_.length() + value_.length(); }
+
+    static HttpHeader pars_head(const string &str)
+    {
+        int i = 0;
+        string new_name, new_value;
+
+        if (!str.empty())
+        {
+            while (str[i] != ' ')
+                new_name += str[i++];
+            new_name += '\0';
+
+            while (i < str.size())
+                new_value += str[i++];
+            new_value += '\0';
+
+            cout << "str = " << str << '\n'  <<"len(new_name) = " << new_name.length() << " len(new_value) = " << new_value.length() << '\n' << "--------------------------" << '\n';  
+        }
+        else
+        {
+            new_name = " ";
+            new_value = " ";
+        }
+
+        return HttpHeader(new_name, new_value);
+    }
+};
+
+class HttpRequest
+{
+    vector<string> lines_;
+
+public:
+    HttpRequest()
+    {
+        lines_ = {"GET / HTTP/1.1\r\0"};
+    }
+
+    string str_uni() const
+    {
+        string tmp;
+        for (int i = 0; i < lines_.size(); i++)
+            tmp += lines_[i];
+        return tmp;
+    }
+};
+
+class HttpAns
+{
+    HttpHeader ans_;
+    HttpHeader *other_;
+    string body_;
+    int len_;
+
+public:
+    HttpAns(vector<string> lines)
+    {
+        ans_ = HttpHeader::pars_head(lines[0]);
+        other_ = new HttpHeader[lines.size() - 1];
+        int i;
+
+        for (i = 1; i < lines.size(); i++)
+        {
+            other_[i - 1] = HttpHeader::pars_head(lines[i]);
+            if ((lines[i]).empty())
+            {
+                body_ = lines[i + 1];
+                break;
+            }
+        }
+        len_ = i;
+    }
+    ~HttpAns()
+    {
+        delete[] other_;
+        cout << "http_ans destr" << endl;
+    }
+
+    void print() const
+    {
+        cout << "ans_: " << ans_.str_uni() << endl;
+        for (int i = 0; i < len_; i++)
+        {
+            cout << "other[" << i << "] : " << (other_[i]).str_uni() << endl;
+            cout << (other_[i]).len() << '\n' << "----------------" << '\n';
+        }
+        cout << endl;
     }
 };
 
@@ -146,15 +256,22 @@ void client_connection()
     SocketAddress saddr(BASE_ADDR, PORT);
     s.Connect(saddr);
 
-    string req = "MAMA";
-    s.Write(req);
-    cout << req << endl;
+    HttpRequest http_req;
+    string str_req = http_req.str_uni();
+    s.Write(str_req);
+    vector<string> lines;
+    string str_ans, tmp;
 
-    string res;
-    s.Read(res);
-    cout << res << '\n';
+    for (auto i = 0; i < 3; ++i)
+    {
+        s.Read(str_ans);
+        tmp += str_ans;
+    }
 
-    vector<string> lines = split_lines(res);
+    lines = split_lines(tmp);
+    HttpAns ans(lines);
+    ans.print();
+    s.Shutdown();
 }
 int main()
 {
