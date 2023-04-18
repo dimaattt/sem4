@@ -7,15 +7,19 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 
 using namespace std;
 
-#define PORT 8000
+#define PORT 1235
 #define BACKLOG 5
-#define BUFSIZE 1024
+#define BUFSIZE 4096
 #define BASE_ADDR "127.0.0.1"
+
+#define ERROR_PAGE "404.html"
+
 
 class SocketAddress
 {
@@ -120,7 +124,7 @@ public:
         int recv_result = recv(sd_, buf, BUFSIZE, 0);
         if (recv_result < 0)
         {
-            cerr << "errr with read (string) " << errno << endl;
+            cerr << "errr with read (string)" << errno << endl;
             exit(1);
         }
 
@@ -188,6 +192,35 @@ string add_lines(const vector<string> &lines)
     return tmp;
 }
 
+vector<uint8_t> to_vector(int fd)
+{
+    vector<uint8_t> res;
+    char c;
+    while (read(fd, &c, sizeof(char))) res.push_back(c);
+
+    return res;
+}
+
+string parse_path(const string &str)
+{
+    string res = "./";
+    for (int i = 0; i < str.length() - 1; ++i)
+    {
+        if (str[i] == ' ')
+        {
+            while (str[i+1] != ' ' && str[i+1] != '\n')
+            {
+                res += str[i+1];
+                i++;
+            }
+            break;
+        }
+    }    
+    if (res == ".//")
+        res = "./index.html";
+    return res;
+}
+
 void process_connection(int cd, const SocketAddress &client_addr)
 {
     ConnectedSocket cs(cd);
@@ -195,15 +228,34 @@ void process_connection(int cd, const SocketAddress &client_addr)
     cs.Read(req);
     vector<string> lines = split_lines(req);
 
-    for (int i = 0; i < lines.size(); i++)
+    string path = parse_path(lines[0]);
+    cout << "path: " << path << endl;
+
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0)
     {
-        cout << "loop: " << lines[i] << " len = " << lines[i].length() << endl;
-        lines[i] = "avs";
+        cout << "HTTP/1.1 404 Not Found" << endl;
+        cs.Write("HTTP/1.1 404 Not Found\r");
+        fd = open(ERROR_PAGE, O_RDONLY);
+        if (fd < 0)
+        {
+            cout << "error with open page 404" << endl;
+        }
+    }
+    else 
+    {
+        cs.Write("HTTP/1.1 200 OK\0");
     }
 
-    string resp;
-    resp = add_lines(lines);
-    cs.Write(resp);
+    vector<uint8_t> vect = to_vector(fd);
+    string str = "\r\nVersion: HTTP/1.1\r\n Content-length: " + to_string(vect.size()) + "\r\n\r\n";
+
+    cout << "Version: HTTP/1.1" << endl;
+    cout << "Content-length: " <<  to_string(vect.size()) << endl;
+
+    cs.Write(str);
+    cs.Write(vect);
+    close(fd);
     cs.Shutdown();
 }
 
@@ -213,6 +265,8 @@ void server_loop()
     SocketAddress server_address(BASE_ADDR, PORT);
     server_socket.Bind(server_address);
     cout << "binded succsessfull!" << endl;
+    cout << "port: " << PORT <<  endl;
+
     server_socket.Listen();
     for (;;)
     {
