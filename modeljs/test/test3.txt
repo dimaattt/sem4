@@ -1,0 +1,8 @@
+program
+{
+int a = 7;
+if(a > 0)
+    write("plus");
+else
+    write("minus");
+}

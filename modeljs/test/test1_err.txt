@@ -1,0 +1,6 @@
+program
+{
+int j = 6;
+j = j / 0;
+write(j);
+}
