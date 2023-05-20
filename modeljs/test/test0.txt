@@ -1,0 +1,7 @@
+program
+{
+int a = 51;
+int c = 123, b;
+b = a + c;
+write (a, b);
+}
